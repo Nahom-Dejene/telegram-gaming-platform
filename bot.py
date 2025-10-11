@@ -1,45 +1,40 @@
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# --- VERY IMPORTANT: EDIT THIS LINE ---
-# Put your full, working GitHub Pages URL here.
-GAME_URL = "https://YourUsername.github.io/telegram-gaming-platform/"
-# --- END OF EDIT SECTION ---
+# --- SECTION TO EDIT ---
+BOT_USERNAME = "HappuGamesBot" 
+GAME_SHORT_NAME = "Fristtest"
+# --- END OF SECTION ---
+
+
+# THIS IS THE CORRECTED LINE
+GAME_URL = "https://nahom-dejene.github.io/telegram-gaming-platform/"
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Sends a welcome message."""
     await update.message.reply_text(
-        f"Greetings, {update.effective_user.first_name}! Send /play to start the game."
+        f"Greetings, {update.effective_user.first_name}! Send /play to start."
     )
 
-async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Sends a message with a 'Play' button."""
+async def play_direct(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Sends a message with a button that has the game URL built-in."""
     
-    # We create a special button with `callback_game=True`.
-    # This tells Telegram that this button is for a game.
-    # We don't specify the game here, just that it's a game button.
+    # This URL is for a button that opens a website directly
     keyboard = [
-        [InlineKeyboardButton("🎮 Click Here to Play!", callback_game=True)]
+        [InlineKeyboardButton("🎮 Play Game!", url=GAME_URL)]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    # The bot sends the message with our special button.
-    await update.message.reply_text('Ready to play?', reply_markup=reply_markup)
+    await update.message.reply_text(
+        'Press the button below to launch the game:', 
+        reply_markup=reply_markup
+    )
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles the button press and provides the game URL."""
-    
-    # Get the signal (the 'query') from the button press.
-    query = update.callback_query
-    
-    # This is the magic command. It 'answers' the signal by telling
-    # the user's Telegram app to open a specific URL.
-    await query.answer(url=GAME_URL)
 
 def main():
-    """Starts the bot and sets up the handlers."""
+    """Starts the bot."""
     token = os.getenv("TELEGRAM_TOKEN")
     if not token:
         print("Error: TELEGRAM_TOKEN environment variable not set.")
@@ -47,14 +42,10 @@ def main():
 
     application = ApplicationBuilder().token(token).build()
 
-    # Command handler for /play
-    application.add_handler(CommandHandler("play", play))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("play", play_direct))
     
-    # CallbackQueryHandler. This is the listener for our button press.
-    # When ANY callback query comes in, it will be handled by the `button_handler` function.
-    application.add_handler(CallbackQueryHandler(button_handler))
-    
-    print("Bot is running with the definitive callback logic...")
+    print("Bot is running and listening for commands...")
     application.run_polling()
 
 if __name__ == "__main__":
