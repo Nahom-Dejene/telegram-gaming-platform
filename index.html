@@ -2,9 +2,24 @@
 <html>
 <head>
     <title>My Awesome Game</title>
+    <!-- THE MAGIC LINE IS HERE -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { font-family: sans-serif; background-color: #222; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        h1 { font-size: 3em; }
+        /* Use a flexible layout to center everything perfectly */
+        body { 
+            font-family: sans-serif; 
+            background-color: #222; 
+            color: white; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; /* Full screen height */
+            margin: 0; 
+            text-align: center; /* Center text on small screens */
+        }
+        h1 { 
+            font-size: 10vw; /* Font size scales with screen width */
+        }
     </style>
 </head>
 <body>

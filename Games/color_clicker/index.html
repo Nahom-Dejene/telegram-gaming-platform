@@ -2,9 +2,41 @@
 <html>
 <head>
     <title>Color Clicker</title>
+    <!-- THE MAGIC LINE IS HERE -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #333; color: white; }
-        #box { width: 150px; height: 150px; background-color: #ff5733; cursor: pointer; border: 2px solid white; display: flex; justify-content: center; align-items: center; font-size: 1.2em; text-align: center; }
+        body { 
+            font-family: sans-serif; 
+            display: flex; 
+            flex-direction: column; /* Stack items vertically */
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            margin: 0; 
+            background-color: #333; 
+            color: white; 
+        }
+        h1 {
+            font-size: 8vw;
+        }
+        p {
+            font-size: 5vw;
+        }
+        /* Make the box responsive */
+        #box { 
+            width: 40vw;  /* 40% of the screen's width */
+            height: 40vw; /* Make it a perfect square */
+            max-width: 150px; /* But don't let it get too big on desktop */
+            max-height: 150px;
+            background-color: #ff5733; 
+            cursor: pointer; 
+            border: 2px solid white; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            font-size: 4vw; /* Scalable font size */
+            text-align: center; 
+        }
     </style>
 </head>
 <body>

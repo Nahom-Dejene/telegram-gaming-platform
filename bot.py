@@ -14,7 +14,7 @@ GAMES = {
     },
     "game_color": {
         "title": "🎨 Color Clicker",
-        "url": "https://nahom-dejene.github.io/telegram-gaming-platform/games/color_clicker/"
+        "url": "https://nahom-dejene.github.io/telegram-gaming-platform/Games/color_clicker/"
     }
     # Add your future games here!
 }
