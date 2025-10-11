@@ -1,37 +1,45 @@
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes # <-- THIS LINE IS FIXED
 
-# --- SECTION TO EDIT ---
-BOT_USERNAME = "HappuGamesBot" 
-GAME_SHORT_NAME = "Fristtest"
-# --- END OF SECTION ---
-
-
-# THIS IS THE CORRECTED LINE
-GAME_URL = "https://nahom-dejene.github.io/telegram-gaming-platform/"
+# ===============================================================
+# Our Game "Database"
+# Make sure these URLs are correct and are the GitHub Pages links,
+# not the links to the code repository.
+# ===============================================================
+GAMES = {
+    "game_hello": {
+        "title": "🚀 Hello Gamer",
+        "url": "https://nahom-dejene.github.io/telegram-gaming-platform/"
+    },
+    "game_color": {
+        "title": "🎨 Color Clicker",
+        "url": "https://nahom-dejene.github.io/telegram-gaming-platform/games/color_clicker/"
+    }
+    # Add your future games here!
+}
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Sends a welcome message."""
     await update.message.reply_text(
-        f"Greetings, {update.effective_user.first_name}! Send /play to start."
+        f"Welcome, {update.effective_user.first_name}! "
+        "Send the /games command to see all available games."
     )
 
-async def play_direct(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Sends a message with a button that has the game URL built-in."""
+async def games(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Displays the game menu."""
     
-    # This URL is for a button that opens a website directly
-    keyboard = [
-        [InlineKeyboardButton("🎮 Play Game!", url=GAME_URL)]
-    ]
+    keyboard = []
+    
+    # Loop through our GAMES dictionary
+    for game_id, game_info in GAMES.items():
+        # We now create a button with a direct `url`.
+        button = InlineKeyboardButton(text=game_info["title"], url=game_info["url"])
+        keyboard.append([button])
+        
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(
-        'Press the button below to launch the game:', 
-        reply_markup=reply_markup
-    )
-
+    await update.message.reply_text("Please choose a game to play:", reply_markup=reply_markup)
 
 def main():
     """Starts the bot."""
@@ -43,9 +51,9 @@ def main():
     application = ApplicationBuilder().token(token).build()
 
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("play", play_direct))
+    application.add_handler(CommandHandler("games", games))
     
-    print("Bot is running and listening for commands...")
+    print("Multi-game platform bot is running (URL button version)...")
     application.run_polling()
 
 if __name__ == "__main__":
