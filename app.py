@@ -63,7 +63,7 @@ def log_action(actor, action, details):
 # Admin API Endpoints
 # ===============================================================
 
-@app.route('/api/admin/rounds', methods=['POST'])
+@app.route('/api/admin/rounds', methods=['POST'], endpoint='create_round_api')
 @admin_required
 def create_round():
     data = request.get_json()
@@ -105,7 +105,7 @@ def create_round():
     # ... (the rest of the function is unchanged) ...
 
 # Find and REPLACE the entire get_all_rounds function with this:
-@app.route('/api/admin/rounds', methods=['GET'])
+@app.route('/api/admin/rounds', methods=['GET'], endpoint='get_all_rounds_api' )
 @admin_required
 def get_all_rounds():
     # Check for a query parameter like ?show=all
