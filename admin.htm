@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <style>
+        body { font-family: sans-serif; background-color: #1c1c1e; color: #fff; padding: 20px; }
+        .container { max-width: 800px; margin: auto; }
+        .section { background-color: #2c2c2e; padding: 20px; border-radius: 12px; margin-bottom: 30px; }
+        h1, h2, h3 { text-align: center; color: #f2f2f7; }
+        input, select { width: calc(100% - 22px); padding: 10px; margin-bottom: 10px; border-radius: 5px; border: 1px solid #444; background-color: #3a3a3c; color: white; }
+        button { background-color: #007aff; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .round-list-item { background-color: #3a3a3c; border-radius: 8px; padding: 15px; margin-bottom: 10px; }
+        .round-header { display: flex; justify-content: space-between; align-items: center; }
+        .round-details { display: none; margin-top: 15px; padding-top: 15px; border-top: 1px solid #545458; }
+        .delete-btn { background-color: #ff3b30; }
+        .archive-btn { background-color: #5856d6; }
+        .filters { display: flex; gap: 20px; margin-bottom: 20px; align-items: center; justify-content: center; }
+        .filters label { display: flex; align-items: center; gap: 5px; }
+        #date-filter-container { display: none; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { text-align: left; padding: 8px; border-bottom: 1px solid #444; }
+        th { color: #8e8e93; }
+        .collapsible-header { cursor: pointer; }
+        .collapsible-content { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Admin Dashboard</h1>
+
+        <div class="section">
+            <h2>Create New Round</h2>
+            <input type="text" id="round-name" placeholder="Round Name"><input type="number" id="round-price" placeholder="Price"><input type="number" id="grid-size" placeholder="Number of Slots"><button onclick="createRound()">Create Round</button>
+        </div>
+
+        <div class="section">
+            <h2>Manage Rounds</h2>
+            <div class="filters">
+                <label><input type="radio" name="status-filter" value="active" onchange="loadRoundsList()" checked> Active/Completed</label>
+                <label><input type="radio" name="status-filter" value="archived" onchange="loadRoundsList()"> Archived</label>
+                <div id="date-filter-container">
+                    <input type="date" id="archive-date-filter" onchange="loadRoundsList()">
+                </div>
+            </div>
+            <div id="rounds-list"></div>
+        </div>
+        
+        <div class="section collapsible-header" onclick="toggleCollapsible('audit-log')">
+            <h2>Audit Logs (Click to Show/Hide)</h2>
+        </div>
+        <div class="collapsible-content section" id="audit-log" style="padding-top:0;">
+             <input type="date" id="log-date-filter" onchange="loadAuditLogs()">
+            <div id="audit-log-content"></div>
+        </div>
+    </div>
+
+<script>
+        const API_URL = 'http://127.0.0.1:5000';
+        let selectedRoundId = null;
+
+        // --- Authentication Gatekeeper ---
+        function getAdminSecret() { return sessionStorage.getItem('adminSecret'); }
+        function checkAdminAuth() {
+            let secret = getAdminSecret();
+            if (!secret) {
+                secret = prompt('Please enter the Admin Secret Key:');
+                if (!secret) { document.body.innerHTML = '<h1>ACCESS DENIED</h1>'; return false; }
+                sessionStorage.setItem('adminSecret', secret);
+            }
+            return true;
+        }
+        async function secureFetch(url, options = {}) {
+            const secret = getAdminSecret();
+            if (!secret) throw new Error('Admin secret not found.');
+            const headers = { 'Content-Type': 'application/json', 'X-Admin-Secret': secret, ...options.headers };
+            const response = await fetch(url, { ...options, headers });
+            if (response.status === 401) {
+                sessionStorage.removeItem('adminSecret');
+                alert('Authentication failed! The secret key is incorrect.');
+                document.body.innerHTML = '<h1>ACCESS DENIED</h1>';
+                throw new Error('Unauthorized');
+            }
+            return response;
+        }
+
+        // --- All functions now use secureFetch ---
+        async function createRound() {
+            const nameInput = document.getElementById('round-name'), priceInput = document.getElementById('round-price'), gridSizeInput = document.getElementById('grid-size');
+            if (!nameInput.value || !priceInput.value || !gridSizeInput.value) { alert('Please fill all fields.'); return; }
+            try {
+                const response = await secureFetch(`${API_URL}/api/admin/rounds`, { method: 'POST', body: JSON.stringify({ name: nameInput.value, price: parseInt(priceInput.value), grid_size: parseInt(gridSizeInput.value) }) });
+                if (response.ok) { nameInput.value = ''; priceInput.value = ''; gridSizeInput.value = ''; alert('Round created!'); loadRoundsList(); } 
+                else { const err = await response.json(); alert(`Failed: ${err.error}`); }
+            } catch (error) { console.error(error); }
+        }
+
+        async function loadRoundsList() {
+            try {
+                const listDiv = document.getElementById('rounds-list');
+                const statusFilter = document.querySelector('input[name="status-filter"]:checked').value;
+                const dateFilterContainer = document.getElementById('date-filter-container');
+                const dateFilter = document.getElementById('archive-date-filter').value;
+                dateFilterContainer.style.display = (statusFilter === 'archived') ? 'block' : 'none';
+                const response = await secureFetch(`${API_URL}/api/admin/rounds?show=all`);
+                const allRounds = await response.json();
+                let roundsToDisplay = [];
+                if (statusFilter === 'active') { roundsToDisplay = allRounds.filter(r => r.status === 'open' || r.status === 'completed'); } 
+                else if (statusFilter === 'archived') {
+                    roundsToDisplay = allRounds.filter(r => r.status === 'archived');
+                    if (dateFilter) { roundsToDisplay = roundsToDisplay.filter(r => r.creation_date.startsWith(dateFilter)); }
+                }
+                listDiv.innerHTML = '';
+                if (roundsToDisplay.length === 0) { listDiv.innerHTML = '<p>No rounds found for this filter.</p>'; }
+                roundsToDisplay.forEach(round => listDiv.appendChild(createRoundListItem(round)));
+            } catch (error) { console.error(error); document.getElementById('rounds-list').innerHTML = '<p>Could not load rounds. Is the key correct?</p>'; }
+        }
+
+        function createRoundListItem(round) { /* ... same as before ... */ }
+        function toggleRoundDetails(roundId, roundStatus) { /* ... same as before ... */ }
+        async function loadRoundDetails(roundId, roundStatus, detailsDiv) { /* ... same as before ... */ }
+        async function deleteRound(roundId) { /* ... same as before ... */ }
+        async function archiveRound(roundId) { /* ... same as before ... */ }
+        async function handleApproval(selectionId, action, roundId) { /* ... same as before ... */ }
+        async function runDraw(roundId) { /* ... same as before ... */ }
+        async function loadAuditLogs() { /* ... same as before ... */ }
+        function toggleCollapsible(elementId) { /* ... same as before ... */ }
+        
+        // Pasting the rest for safety
+        function createRoundListItem(round) {
+            const item = document.createElement('div'); item.className = 'round-list-item'; item.id = `round-item-${round.id}`;
+            let buttons = `<button onclick="toggleRoundDetails(${round.id}, '${round.status}')">Manage</button>`;
+            if (round.status === 'open') buttons += ` <button class="delete-btn" onclick="deleteRound(${round.id})">Delete</button>`;
+            if (round.status === 'completed') buttons += ` <button class="archive-btn" onclick="archiveRound(${round.id})">Archive</button>`;
+            item.innerHTML = `<div class="round-header"><span>${round.name} (<i>${round.status}</i>)</span><div>${buttons}</div></div><div class="round-details" id="details-for-${round.id}"></div>`;
+            return item;
+        }
+        function toggleRoundDetails(roundId, roundStatus) {
+            const detailsDiv = document.getElementById(`details-for-${roundId}`);
+            document.querySelectorAll('.round-details').forEach(div => { if (div.id !== `details-for-${roundId}`) div.style.display = 'none'; });
+            if (detailsDiv.style.display === 'block') { detailsDiv.style.display = 'none'; } else { detailsDiv.style.display = 'block'; loadRoundDetails(roundId, roundStatus, detailsDiv); }
+        }
+        async function loadRoundDetails(roundId, roundStatus, detailsDiv) {
+            let content = '';
+            try {
+                if (roundStatus === 'open') {
+                    const response = await secureFetch(`${API_URL}/api/admin/pending_approvals/${roundId}`); const pending = await response.json(); content = '<h4>Pending Approvals</h4>';
+                    if (pending.length > 0) { pending.forEach(item => { content += `<div class="pending-item"><span>#${item.number} | ${item.user_name}</span><div><button onclick="handleApproval(${item.id}, 'approve', ${roundId})">Approve</button><button class="delete-btn" onclick="handleApproval(${item.id}, 'disapprove', ${roundId})">Disapprove</button></div></div>`; }); } else { content += '<p>None.</p>'; }
+                    content += `<br><button style="width:100%;" onclick="runDraw(${roundId})">Run Draw for This Round</button>`;
+                } else if (roundStatus === 'completed' || roundStatus === 'archived') {
+                    const response = await secureFetch(`${API_URL}/api/admin/winners/${roundId}`); const winners = await response.json(); content = '<h4>🏆 Winners</h4>';
+                    if (winners.length > 0) { let table = '<table><tr><th>Tier</th><th>Number</th><th>Winner Name</th><th>Prize</th></tr>'; winners.forEach(w => { table += `<tr><td>${w.prize_tier}</td><td>${w.winning_number}</td><td>${w.user_name}</td><td>${w.prize_amount.toFixed(2)} Birr</td></tr>`; }); table += '</table>'; content += table; } else { content += '<p>No winners recorded.</p>'; }
+                }
+            } catch(e) { content = '<p>Could not load details.</p>' }
+            detailsDiv.innerHTML = content;
+        }
+        async function deleteRound(roundId) {
+            if (!confirm('Are you sure?')) return;
+            try {
+                const response = await secureFetch(`${API_URL}/api/admin/rounds/${roundId}`, { method: 'DELETE' }); const result = await response.json();
+                if (response.ok) { alert(result.message); loadRoundsList(); } else { alert(`Error: ${result.error}`); }
+            } catch (error) { console.error(error); }
+        }
+        async function archiveRound(roundId) {
+            if (!confirm('Are you sure?')) return;
+            try {
+                const response = await secureFetch(`${API_URL}/api/admin/archive_round/${roundId}`, { method: 'POST' });
+                if (response.ok) { alert('Round archived.'); loadRoundsList(); } else { const result = await response.json(); alert(`Error: ${result.error}`); }
+            } catch (error) { console.error(error); }
+        }
+        async function handleApproval(selectionId, action, roundId) {
+            const endpoint = `/api/admin/${action}_selection`;
+            try {
+                await secureFetch(API_URL + endpoint, { method: 'POST', body: JSON.stringify({ selection_id: selectionId }) });
+                const detailsDiv = document.getElementById(`details-for-${roundId}`); loadRoundDetails(roundId, 'open', detailsDiv);
+            } catch (error) { console.error(error); }
+        }
+        async function runDraw(roundId) {
+            if (!confirm('Are you sure?')) return;
+            try {
+                const response = await secureFetch(`${API_URL}/api/admin/run_draw/${roundId}`, { method: 'POST' }); const result = await response.json();
+                if (response.ok) { alert('Draw complete!'); loadRoundsList(); } else { alert(`Error: ${result.error}`); }
+            } catch (error) { console.error(error); }
+        }
+        async function loadAuditLogs() {
+            try {
+                const logDiv = document.getElementById('audit-log-content'); const dateFilter = document.getElementById('log-date-filter').value;
+                logDiv.innerHTML = '<p>Loading logs...</p>'; const response = await secureFetch(`${API_URL}/api/admin/audit_logs`); let logs = await response.json();
+                if (dateFilter) { logs = logs.filter(log => log.log_date.startsWith(dateFilter)); }
+                let table = '<table><tr><th>Date</th><th>Actor</th><th>Action</th><th>Details</th></tr>';
+                if (logs.length > 0) { logs.forEach(log => { table += `<tr><td>${new Date(log.log_date).toLocaleString()}</td><td>${log.actor}</td><td>${log.action}</td><td>${log.details || ''}</td></tr>`; }); } else { table += '<tr><td colspan="4">No logs found.</td></tr>'; }
+                table += '</table>'; logDiv.innerHTML = table;
+            } catch (error) { console.error(error); }
+        }
+        function toggleCollapsible(elementId) {
+            const content = document.getElementById(elementId);
+            if (content.style.display === 'block') { content.style.display = 'none'; } else { content.style.display = 'block'; if (elementId === 'audit-log') loadAuditLogs(); }
+        }
+        
+        // --- Initial Load ---
+        document.addEventListener('DOMContentLoaded', () => {
+            if (checkAdminAuth()) {
+                loadRoundsList();
+            }
+        });
+    </script>
+</body>
+</html>

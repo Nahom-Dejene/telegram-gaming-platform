@@ -1,28 +1,145 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>My Awesome Game</title>
-    <!-- THE MAGIC LINE IS HERE -->
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lottery Lobby</title>
     <style>
-        /* Use a flexible layout to center everything perfectly */
-        body { 
-            font-family: sans-serif; 
-            background-color: #222; 
-            color: white; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            height: 100vh; /* Full screen height */
-            margin: 0; 
-            text-align: center; /* Center text on small screens */
-        }
-        h1 { 
-            font-size: 10vw; /* Font size scales with screen width */
-        }
+        body { font-family: sans-serif; background-color: #1c1c1e; color: #fff; padding: 20px; text-align: center; }
+        .hidden { display: none; }
+        #lobby, #game-board { max-width: 600px; margin: 0 auto; }
+        .round-card { background-color: #3a3a3c; border-radius: 12px; padding: 20px; margin-bottom: 15px; cursor: pointer; transition: transform 0.2s; }
+        .round-card:hover { transform: scale(1.03); }
+        .round-card h2 { margin: 0 0 10px 0; }
+        .round-card p { margin: 5px 0 0 0; color: #c7c7cc; }
+        #recent-winners { margin-top: 40px; }
+        .winners-container { height: 180px; overflow: hidden; position: relative; background-color: #2c2c2e; border-radius: 8px; padding: 10px; }
+        #recent-winners-list { list-style: none; padding: 0; margin: 0; position: absolute; width: calc(100% - 20px); animation: scroll-up 20s linear infinite; }
+        #recent-winners-list.paused { animation-play-state: paused; }
+        #recent-winners-list li { padding: 10px; border-bottom: 1px solid #444; }
+        #recent-winners-list li:last-child { border-bottom: none; }
+        @keyframes scroll-up { 0% { transform: translateY(0%); } 100% { transform: translateY(-50%); } }
+        #grid-container { display: grid; grid-template-columns: repeat(10, 1fr); gap: 8px; margin-top: 20px; }
+        .grid-number { aspect-ratio: 1 / 1; display: flex; justify-content: center; align-items: center; font-weight: bold; border-radius: 8px; cursor: pointer; }
+        .status-available { background-color: #34c759; }
+        .status-pending { background-color: #ff9500; cursor: not-allowed; }
+        .status-confirmed { background-color: #5856d6; cursor: not-allowed; }
+        #message-area { margin-top: 20px; font-size: 1.2em; min-height: 2em; }
     </style>
 </head>
 <body>
-    <h1>Hello, Gamer!</h1>
+
+    <div id="lobby">
+        <h1>Open Lottery Rounds</h1>
+        <div id="rounds-list"><p>Loading rounds...</p></div>
+        <div id="recent-winners">
+            <h2>🏆 Recent Winners</h2>
+            <div class="winners-container" id="winners-wrapper">
+                <ul id="recent-winners-list"><li>Loading winners...</li></ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- THIS IS THE CORRECTED HTML SECTION -->
+    <div id="game-board" class="hidden">
+        <h1 id="round-name"></h1>
+        <div id="grid-container"></div>
+        <div id="message-area">Loading game grid...</div>
+    </div>
+    <!-- END OF CORRECTION -->
+
+    <script>
+        // The last version of the script with debugging is fine.
+        // I will paste the clean version now for the final product.
+        const lobbyView = document.getElementById('lobby');
+        const gameView = document.getElementById('game-board');
+        const API_URL = 'http://127.0.0.1:5000';
+        let currentRoundId = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            currentRoundId = params.get('round');
+            if (currentRoundId) {
+                lobbyView.classList.add('hidden');
+                gameView.classList.remove('hidden');
+                loadGameGrid(currentRoundId);
+            } else {
+                loadLobby();
+                loadRecentWinners();
+            }
+        });
+
+        async function loadLobby() {
+            const roundsList = document.getElementById('rounds-list');
+            try {
+                const response = await fetch(`${API_URL}/api/rounds/open`);
+                if (!response.ok) throw new Error('Network response was not ok');
+                const rounds = await response.json();
+                roundsList.innerHTML = '';
+                if (rounds.length === 0) { roundsList.innerHTML = '<p>No open rounds available.</p>'; return; }
+                rounds.forEach(round => {
+                    const card = document.createElement('div'); card.className = 'round-card';
+                    card.innerHTML = `<h2>${round.name}</h2><p>${round.price} Birr Entry</p><p>${round.confirmed_players} / ${round.grid_size} Slots Filled</p>`;
+                    card.onclick = () => { window.location.href = `?round=${round.id}`; };
+                    roundsList.appendChild(card);
+                });
+            } catch (error) { console.error("Lobby Error:", error); roundsList.innerHTML = '<p>Could not load rounds.</p>'; }
+        }
+
+        async function loadRecentWinners() {
+            const recentWinnersList = document.getElementById('recent-winners-list');
+            const winnersWrapper = document.getElementById('winners-wrapper');
+            try {
+                const response = await fetch(`${API_URL}/api/winners/recent?limit=20`);
+                if (!response.ok) throw new Error('Network response was not ok');
+                const winners = await response.json();
+                recentWinnersList.innerHTML = '';
+                if (winners.length === 0) { recentWinnersList.innerHTML = '<li>No winners yet.</li>'; return; }
+                const winnerItems = winners.map(w => `<li>${w.user_name} won ${w.prize_amount.toFixed(2)} Birr in "${w.round_name}"</li>`).join('');
+                recentWinnersList.innerHTML = winnerItems + winnerItems;
+                winnersWrapper.addEventListener('mouseenter', () => recentWinnersList.classList.add('paused'));
+                winnersWrapper.addEventListener('mouseleave', () => recentWinnersList.classList.remove('paused'));
+            } catch (error) { console.error("Winners Error:", error); recentWinnersList.innerHTML = '<li>Could not load winners.</li>'; }
+        }
+
+        async function loadGameGrid(roundId) {
+            const roundNameHeader = document.getElementById('round-name');
+            const gridContainer = document.getElementById('grid-container');
+            const messageArea = document.getElementById('message-area');
+            try {
+                const response = await fetch(`${API_URL}/api/game_state/${roundId}`);
+                if (!response.ok) throw new Error('Network response was not ok');
+                const state = await response.json();
+                roundNameHeader.textContent = state.round_name;
+                gridContainer.innerHTML = '';
+                const selections = state.selections || {};
+                for (let i = 1; i <= state.grid_size; i++) {
+                    const numberDiv = document.createElement('div'); numberDiv.className = 'grid-number'; numberDiv.textContent = i;
+                    const selection = selections[i];
+                    if (selection) { numberDiv.classList.add(`status-${selection.status}`); numberDiv.title = `Selected by: ${selection.user_name}`; } 
+                    else { numberDiv.classList.add('status-available'); numberDiv.onclick = () => handleNumberClick(roundId, i); }
+                    gridContainer.appendChild(numberDiv);
+                }
+                messageArea.textContent = 'Please select an available number.';
+            } catch (error) { console.error("Game Grid Error:", error); messageArea.textContent = 'Could not load grid.'; }
+        }
+
+        async function handleNumberClick(roundId, number) {
+            const messageArea = document.getElementById('message-area');
+            const userName = prompt(`You selected number ${number}. Please enter your name:`);
+            if (!userName || !userName.trim()) return;
+            const userId = 'user_' + Math.random().toString(36).substr(2, 9);
+            try {
+                const response = await fetch(`${API_URL}/api/select_number`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ round_id: roundId, number: number, user_id: userId, user_name: userName.trim() })
+                });
+                if (!response.ok) { const err = await response.json(); throw new Error(err.error); }
+                const result = await response.json();
+                messageArea.textContent = result.message;
+                loadGameGrid(roundId);
+            } catch (error) { console.error("Selection Error:", error); messageArea.textContent = `Error: ${error.message}`; }
+        }
+    </script>
 </body>
 </html>
