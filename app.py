@@ -10,7 +10,9 @@ import asyncio
 # Telegram Bot Imports
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.constants import ParseMode
 
+bot_event_loop = None
 # ===============================================================
 # Initialize Flask App & Telegram Bot
 # ===============================================================
@@ -155,42 +157,39 @@ def disapprove_selection():
 @app.route('/api/admin/run_draw/<int:round_id>', methods=['POST'])
 @admin_required
 def run_draw(round_id):
-    # ... (The first part of the function is the same: get round info, get selections, check count) ...
+    # ... (The first part of the function is the same) ...
     conn = get_db_connection()
     round_info = conn.execute("SELECT * FROM rounds WHERE id = ?", (round_id,)).fetchone()
-    if not round_info or round_info['status'] != 'open':
-        conn.close()
-        return jsonify({'error': 'Round is not open for a draw'}), 400
-    confirmed_selections = conn.execute("SELECT * FROM selections WHERE round_id = ? AND status = 'confirmed'", (round_id,)).fetchall()
-    if len(confirmed_selections) < 3:
-        conn.close()
-        return jsonify({'error': f'Need at least 3 confirmed players, have {len(confirmed_selections)}.'}), 400
-    
-    # ... (Prize calculation is the same) ...
-    prize_pool = len(confirmed_selections) * round_info['price']
+    if not round_info or round_info['status'] != 'open': # ...
+        confirmed_selections = conn.execute("SELECT * FROM selections WHERE round_id = ? AND status = 'confirmed'", (round_id,)).fetchall()
+    if len(confirmed_selections) < 3: # ...
+        prize_pool = len(confirmed_selections) * round_info['price']
     prizes = {1: prize_pool * 0.40, 2: prize_pool * 0.20, 3: prize_pool * 0.10}
     winners = random.sample(confirmed_selections, 3)
 
-    # --- NEW LOGIC: SEND TELEGRAM MESSAGES ---
-    if bot_app:
+    # --- NEW, MORE ROBUST MESSAGE SENDING LOGIC ---
+    if bot_app and bot_event_loop:
         print("Attempting to send winner notifications via Telegram...")
         for i, winner in enumerate(winners):
             prize_tier = i + 1
             winner_user_id = winner['user_id']
             message = (
-                f"🎉 Congratulations, {winner['user_name']}! 🎉\n\n"
-                f"You have won in the lottery round: **{round_info['name']}**.\n\n"
-                f"**Your Rank:** {prize_tier}\n"
-                f"**Your Winning Number:** {winner['number']}\n"
-                f"**Your Prize:** {prizes[prize_tier]:.2f} Birr\n\n"
+                f"🎉 *Congratulations, {winner['user_name']}!* 🎉\n\n"
+                f"You have won in the lottery round: *{round_info['name']}*.\n\n"
+                f"*Your Rank:* {prize_tier}\n"
+                f"*Your Winning Number:* {winner['number']}\n"
+                f"*Your Prize:* {prizes[prize_tier]:.2f} Birr\n\n"
                 "We will be in contact with you shortly regarding your prize."
             )
             try:
-                # We need to run this async function within our sync Flask context
-                asyncio.run(bot_app.bot.send_message(chat_id=winner_user_id, text=message, parse_mode='Markdown'))
-                print(f"Successfully sent message to user ID: {winner_user_id}")
+                # Use asyncio.run_coroutine_threadsafe to submit the task to the bot's own event loop
+                asyncio.run_coroutine_threadsafe(
+                    bot_app.bot.send_message(chat_id=winner_user_id, text=message, parse_mode=ParseMode.MARKDOWN_V2), 
+                    bot_event_loop
+                )
+                print(f"Successfully scheduled message for user ID: {winner_user_id}")
             except Exception as e:
-                print(f"ERROR: Could not send message to user ID {winner_user_id}. Reason: {e}")
+                print(f"ERROR: Could not schedule message for user ID {winner_user_id}. Reason: {e}")
     # --- END OF NEW LOGIC ---
 
     # ... (The rest of the function is the same: save winners to DB, close round) ...
@@ -204,6 +203,21 @@ def run_draw(round_id):
     log_action('ADMIN', 'RUN_DRAW', f'Draw completed for round {round_id}.')
     return jsonify({'success': True, 'winners': [dict(w) for w in winners]})
 
+# --- REPLACE the bot startup logic with this version ---
+# This version captures the event loop and stores it in our global variable.
+def run_bot_in_thread():
+    """Wrapper to run the async bot logic and capture its event loop."""
+    global bot_event_loop
+    print("--- [BOT THREAD] Creating new event loop for bot. ---")
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    # Store the loop so other threads can access it
+    bot_event_loop = loop
+    
+    loop.run_until_complete(main_bot_logic())
+    print("--- [BOT THREAD] Event loop finished. ---")
+    
 @app.route('/api/admin/archive_round/<int:round_id>', methods=['POST'])
 @admin_required
 def archive_round(round_id):
