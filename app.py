@@ -8,9 +8,8 @@ import random
 import asyncio
 
 # Telegram Bot Imports
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes, ExtBot
-
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, ContextTypes
 app = Flask(__name__)
 CORS(app)
 
