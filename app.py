@@ -5,6 +5,9 @@ from flask_cors import CORS
 import re
 import os
 from functools import wraps
+import threading
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 
 app = Flask(__name__)
@@ -377,11 +380,43 @@ def get_recent_winners():
     conn.close()
     return jsonify([dict(row) for row in winners_cursor])
 # ... (rest of your app.py) ...
-# We will build the new /api/game_state/<round_id> endpoint next.
+# # ... (after your last API endpoint) ...
+
+# ===============================================================
+# TELEGRAM BOT LOGIC
+# ===============================================================
+GAME_LOBBY_URL = "https://nahom-dejene.github.io/telegram-gaming-platform/"
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Greets the user and sends the 'Play Game' button."""
+    keyboard = [[InlineKeyboardButton("🎮 Open Game Lobby", url=GAME_LOBBY_URL)]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    welcome_message = f"Greetings, {update.effective_user.first_name}!\n\nWelcome to the Lottery Platform. Press the button below to join a round."
+    await update.message.reply_text(welcome_message, reply_markup=reply_markup)
+
+def run_bot():
+    """Starts the Telegram bot in a polling loop."""
+    print("Starting bot polling...")
+    token = os.getenv("TELEGRAM_TOKEN")
+    if not token:
+        print("CRITICAL: TELEGRAM_TOKEN environment variable not set. Bot will not start.")
+        return
+
+    application = ApplicationBuilder().token(token).build()
+    application.add_handler(CommandHandler("start", start))
+    application.run_polling()
 
 
+# REPLACE your old if __name__ == '__main__': block with this:
 if __name__ == '__main__':
-    # Important: To run for the first time after changing the schema:
-    # 1. Delete lottery.db
-    # 2. Run `python` in terminal, then `from app import init_db`, then `init_db()`
-    app.run(debug=True)
+   # ... (all your API endpoints and bot functions are above this) ...
+
+# --- Main Execution ---
+# This part of the code runs when Gunicorn imports the file.
+    print("Starting bot thread...")
+    bot_thread = threading.Thread(target=run_bot)
+    bot_thread.daemon = True  # Allows the main app to exit even if the thread is running
+    bot_thread.start()
+    print("Bot thread started.")
+
+# Gunicorn will look for the 'app' object, so we don't need an if __name__ == '__main__' block for deployment.
