@@ -8,7 +8,7 @@ from functools import wraps
 import threading
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-
+import asyncio
 
 app = Flask(__name__)
 CORS(app)
@@ -383,10 +383,11 @@ def get_recent_winners():
 # # ... (after your last API endpoint) ...
 
 # ===============================================================
-# TELEGRAM BOT LOGIC
+# TELEGRAM BOT LOGIC (Corrected for v20+)
 # ===============================================================
 GAME_LOBBY_URL = "https://nahom-dejene.github.io/telegram-gaming-platform/"
 
+# The 'start' command handler is async, which is already correct.
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Greets the user and sends the 'Play Game' button."""
     keyboard = [[InlineKeyboardButton("🎮 Open Game Lobby", url=GAME_LOBBY_URL)]]
@@ -394,84 +395,46 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_message = f"Greetings, {update.effective_user.first_name}!\n\nWelcome to the Lottery Platform. Press the button below to join a round."
     await update.message.reply_text(welcome_message, reply_markup=reply_markup)
 
-# In app.py, replace the old run_bot function with this one.
+# THIS IS THE NEW, CORRECT WAY TO RUN THE BOT
+async def main_bot_logic():
+    """The main asynchronous logic for the bot."""
+    print("--- [BOT ASYNC] Starting bot setup... ---")
+    token = os.getenv("TELEGRAM_TOKEN")
+    if not token:
+        print("--- [BOT ASYNC] CRITICAL: TELEGRAM_TOKEN not set. Halting bot. ---")
+        return
 
-def run_bot():
-    """Starts the Telegram bot with detailed error logging."""
-    print("--- [BOT THREAD] Starting Telegram Bot Polling ---")
+    application = ApplicationBuilder().token(token).build()
+    application.add_handler(CommandHandler("start", start))
     
-    try:
-        token = os.getenv("TELEGRAM_TOKEN")
-        if not token:
-            print("--- [BOT THREAD] CRITICAL: TELEGRAM_TOKEN not set. Halting bot thread. ---")
-            return
+    print("--- [BOT ASYNC] Bot configured. Starting polling... ---")
+    # run_polling() is a shorthand that handles everything in the background.
+    # It correctly starts and stops the async event loop.
+    await application.run_polling()
+    print("--- [BOT ASYNC] run_polling has finished. ---")
 
-        print(f"--- [BOT THREAD] Token found with length: {len(token)}. Initializing ApplicationBuilder. ---")
-        
-        # Build the application
-        application = ApplicationBuilder().token(token).build()
-        print("--- [BOT THREAD] Application built successfully. ---")
 
-        # Add the command handler
-        application.add_handler(CommandHandler("start", start))
-        print("--- [BOT THREAD] /start handler added. ---")
-        
-        # Get the updater to start polling manually
-        updater = application.updater
-        if not updater:
-             print("--- [BOT THREAD] CRITICAL: Updater object not found. Cannot start polling. ---")
-             return
-             
-        print("--- [BOT THREAD] Starting updater polling loop... ---")
-        updater.start_polling()
-        print("--- [BOT THREAD] Bot is now officially running and polling for updates. ---")
-        
-        # We need to keep this thread alive.
-        updater.idle()
-        print("--- [BOT THREAD] Bot has stopped polling (idle). ---")
+def run_bot_in_thread():
+    """Wrapper to run the async bot logic in a new event loop in its own thread."""
+    print("--- [BOT THREAD] Creating new event loop for bot. ---")
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(main_bot_logic())
+    print("--- [BOT THREAD] Event loop finished. ---")
 
-    except Exception as e:
-        # Catch ANY and ALL exceptions during startup and log them.
-        print("--- [BOT THREAD] !!! AN UNEXPECTED ERROR OCCURRED DURING BOT STARTUP !!! ---")
-        print(f"--- [BOT THREAD] ERROR TYPE: {type(e).__name__} ---")
-        print(f"--- [BOT THREAD] ERROR DETAILS: {e} ---")
-        # For more detailed debugging, you could also import traceback and print the stack trace
-        import traceback
-        traceback.print_exc()
-        print("--- [BOT THREAD] Halting bot thread due to error. ---")
+
 # ===============================================================
-# Main Execution: Start Bot Thread and Flask App
+# Main Execution
 # ===============================================================
 
-# This top-level code will run when Gunicorn imports the file on Render
+# This top-level code runs when Gunicorn imports the file.
 print("--- Starting bot thread from top level ---")
-bot_thread = threading.Thread(target=run_bot)
+# We now target the new wrapper function
+bot_thread = threading.Thread(target=run_bot_in_thread)
 bot_thread.daemon = True
 bot_thread.start()
+print("--- Bot thread started. Main thread continues. ---")
 
-# ADD THIS NEW FUNCTION TO app.py
-@app.route('/debug/env')
-def debug_env():
-    """A temporary endpoint to check environment variables on the server."""
-    token = os.getenv("TELEGRAM_TOKEN")
-    
-    if token:
-        token_status = {
-            "token_is_set": True,
-            "token_length": len(token),
-            "first_4_chars": token[:4],
-            "last_4_chars": token[-4:]
-        }
-    else:
-        token_status = {
-            "token_is_set": False,
-            "message": "TELEGRAM_TOKEN environment variable was not found."
-        }
-        
-    return jsonify({
-        "environment_check": "OK",
-        "telegram_token_status": token_status
-    })
 
 if __name__ == '__main__':
     print("--- Running in local development mode ---")
