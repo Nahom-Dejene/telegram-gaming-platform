@@ -395,9 +395,7 @@ def get_recent_winners():
 # ===============================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Greets the user and sends the 'Play Game' button."""
-   
-    web_app = WebAppInfo(url=GAME_LOBBY_URL)
-    keyboard = [[InlineKeyboardButton("🎮 Open Game Lobby", web_app=web_app)]]
+    keyboard = [[InlineKeyboardButton("🎮 Open Game Lobby", url=GAME_LOBBY_URL)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     welcome_message = f"Greetings, {update.effective_user.first_name}!\n\nWelcome to the Lottery Platform. Press the button below to join a round."
     await update.message.reply_text(welcome_message, reply_markup=reply_markup)
