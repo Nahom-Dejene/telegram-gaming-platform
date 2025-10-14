@@ -11,15 +11,18 @@
         #lobby, #game-board { max-width: 600px; margin: 0 auto; }
         .round-card { background-color: #3a3a3c; border-radius: 12px; padding: 20px; margin-bottom: 15px; cursor: pointer; transition: transform 0.2s; }
         .round-card:hover { transform: scale(1.03); }
+        h1, h2 { color: #f2f2f7; }
         .round-card h2 { margin: 0 0 10px 0; }
         .round-card p { margin: 5px 0 0 0; color: #c7c7cc; }
-        #recent-winners { margin-top: 40px; }
-        .winners-container { height: 180px; overflow: hidden; position: relative; background-color: #2c2c2e; border-radius: 8px; padding: 10px; }
-        #recent-winners-list { list-style: none; padding: 0; margin: 0; position: absolute; width: calc(100% - 20px); animation: scroll-up 20s linear infinite; }
-        #recent-winners-list.paused { animation-play-state: paused; }
-        #recent-winners-list li { padding: 10px; border-bottom: 1px solid #444; }
-        #recent-winners-list li:last-child { border-bottom: none; }
-        @keyframes scroll-up { 0% { transform: translateY(0%); } 100% { transform: translateY(-50%); } }
+        
+        /* --- NEW STYLES FOR WINNER HISTORY --- */
+        #winner-history { margin-top: 40px; }
+        .draw-card { background-color: #2c2c2e; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
+        .draw-card h3 { margin: 0 0 15px 0; border-bottom: 1px solid #444; padding-bottom: 10px; }
+        .winner-entry { display: flex; justify-content: space-between; padding: 5px 0; }
+        .winner-entry .rank { font-weight: bold; }
+        
+        /* --- Grid styles (unchanged) --- */
         #grid-container { display: grid; grid-template-columns: repeat(10, 1fr); gap: 8px; margin-top: 20px; }
         .grid-number { aspect-ratio: 1 / 1; display: flex; justify-content: center; align-items: center; font-weight: bold; border-radius: 8px; cursor: pointer; }
         .status-available { background-color: #34c759; }
@@ -32,84 +35,130 @@
 
     <div id="lobby">
         <h1>Open Lottery Rounds</h1>
-        <div id="rounds-list"><p>Loading rounds...</p></div>
-        <div id="recent-winners">
-            <h2>🏆 Recent Winners</h2>
-            <div class="winners-container" id="winners-wrapper">
-                <ul id="recent-winners-list"><li>Loading winners...</li></ul>
-            </div>
+        <div id="rounds-list"></div>
+        <div id="winner-history">
+            <h2>🏆 Recent Draws</h2>
+            <div id="winner-history-list"></div>
         </div>
     </div>
 
-    <!-- THIS IS THE CORRECTED HTML SECTION -->
     <div id="game-board" class="hidden">
+        <!-- Game board content is here -->
         <h1 id="round-name"></h1>
         <div id="grid-container"></div>
         <div id="message-area">Loading game grid...</div>
     </div>
-    <!-- END OF CORRECTION -->
 
-<script>
-        const API_URL = 'https://telegram-gaming-platform.onrender.com';
-
-        // --- Main Entry Point: Use window.onload for maximum safety ---
-        window.onload = function() {
-            // This function will only run after ALL scripts, including telegram-web-app.js, are loaded.
-            
-            // 1. Initialize Telegram Web App
+    <script>
+        const API_URL = 'https://telegram-gaming-platform.onrender.com'; // Use your live URL
+        
+        window.onload = function() { /* ... unchanged ... */ };
+        function startApp() { /* ... unchanged ... */ }
+        
+        // --- THIS IS THE NEW WINNERS FUNCTION ---
+        async function loadWinnerHistory() {
+            const historyList = document.getElementById('winner-history-list');
             try {
-                const tg = window.Telegram.WebApp;
-                tg.ready(); // Signal that the app is ready
-                window.tgUser = tg.initDataUnsafe.user;
-                console.log("SUCCESS: Telegram Web App initialized. User:", window.tgUser);
+                const response = await fetch(`${API_URL}/api/winners/history`);
+                if (!response.ok) throw new Error('Network error');
+                const history = await response.json();
+                
+                historyList.innerHTML = '';
+                if (history.length === 0) {
+                    historyList.innerHTML = '<p>No completed draws yet.</p>';
+                    return;
+                }
+
+                history.forEach(draw => {
+                    const drawCard = document.createElement('div');
+                    drawCard.className = 'draw-card';
+                    
+                    let winnersHtml = '';
+                    draw.winners.forEach(winner => {
+                        winnersHtml += `
+                            <div class="winner-entry">
+                                <span class="rank">Rank ${winner.prize_tier}</span>
+                                <span>${winner.user_name}</span>
+                                <span>${winner.prize_amount.toFixed(2)} Birr</span>
+                            </div>
+                        `;
+                    });
+
+                    drawCard.innerHTML = `<h3>${draw.round_name}</h3>${winnersHtml}`;
+                    historyList.appendChild(drawCard);
+                });
+
             } catch (error) {
-                console.error("INFO: Could not initialize Telegram Web App. Running in fallback mode.", error);
-                // window.tgUser will remain undefined
-            }
-
-            // 2. Start the Application Logic
-            startApp();
-        };
-
-        function startApp() {
-            const lobbyView = document.getElementById('lobby');
-            const gameView = document.getElementById('game-board');
-            const params = new URLSearchParams(window.location.search);
-            const currentRoundId = params.get('round');
-
-            if (currentRoundId) {
-                lobbyView.classList.add('hidden');
-                gameView.classList.remove('hidden');
-                loadGameGrid(currentRoundId);
-            } else {
-                loadLobby();
-                loadRecentWinners();
+                console.error("Failed to load winner history:", error);
+                historyList.innerHTML = '<p>Could not load winner history.</p>';
             }
         }
 
-        // --- All other functions (loadLobby, etc.) ---
-        
+        // --- All other functions are the same ---
+        // I will paste them below to ensure a complete file.
+        window.onload = function() {
+            try {
+                const tg = window.Telegram.WebApp; tg.ready(); window.tgUser = tg.initDataUnsafe.user;
+            } catch (error) { console.error("Could not init TG Web App."); }
+            startApp();
+        };
+        function startApp() {
+            const lobbyView = document.getElementById('lobby'); const gameView = document.getElementById('game-board');
+            const params = new URLSearchParams(window.location.search); const currentRoundId = params.get('round');
+            if (currentRoundId) {
+                lobbyView.classList.add('hidden'); gameView.classList.remove('hidden'); loadGameGrid(currentRoundId);
+            } else {
+                loadLobby();
+                loadWinnerHistory(); // Replaced loadRecentWinners with this
+            }
+        }
+        async function loadLobby() {
+            const roundsList = document.getElementById('rounds-list');
+            try {
+                const response = await fetch(`${API_URL}/api/rounds/open`);
+                if (!response.ok) throw new Error('Network error');
+                const rounds = await response.json();
+                roundsList.innerHTML = '';
+                if (rounds.length === 0) { roundsList.innerHTML = '<p>No open rounds.</p>'; return; }
+                rounds.forEach(round => {
+                    const card = document.createElement('div'); card.className = 'round-card';
+                    card.innerHTML = `<h2>${round.name}</h2><p>${round.price} Birr Entry</p><p>${round.confirmed_players} / ${round.grid_size} Slots Filled</p>`;
+                    card.onclick = () => { window.location.href = `?round=${round.id}`; };
+                    roundsList.appendChild(card);
+                });
+            } catch (error) { console.error("Lobby Error:", error); roundsList.innerHTML = '<p>Could not load rounds.</p>'; }
+        }
+        async function loadGameGrid(roundId) {
+            const roundNameHeader = document.getElementById('round-name'), gridContainer = document.getElementById('grid-container'), messageArea = document.getElementById('message-area');
+            try {
+                const response = await fetch(`${API_URL}/api/game_state/${roundId}`);
+                if (!response.ok) throw new Error('Network error');
+                const state = await response.json();
+                roundNameHeader.textContent = state.round_name; gridContainer.innerHTML = '';
+                const selections = state.selections || {};
+                for (let i = 1; i <= state.grid_size; i++) {
+                    const numberDiv = document.createElement('div'); numberDiv.className = 'grid-number'; numberDiv.textContent = i;
+                    const selection = selections[i];
+                    if (selection) { numberDiv.classList.add(`status-${selection.status}`); numberDiv.title = `Selected by: ${selection.user_name}`; } 
+                    else { numberDiv.classList.add('status-available'); numberDiv.onclick = () => handleNumberClick(roundId, i); }
+                    gridContainer.appendChild(numberDiv);
+                }
+                messageArea.textContent = 'Select a number.';
+            } catch (error) { console.error("Game Grid Error:", error); messageArea.textContent = 'Could not load grid.'; }
+        }
         async function handleNumberClick(roundId, number) {
             let userId, userName;
-
             if (window.tgUser && window.tgUser.id) {
                 userId = window.tgUser.id;
                 userName = window.tgUser.username ? `@${window.tgUser.username}` : `${window.tgUser.first_name} ${window.tgUser.last_name || ''}`.trim();
-                if (!confirm(`Confirm selection of number ${number} as ${userName}?`)) {
-                    return;
-                }
+                if (!confirm(`Confirm selection of number ${number} as ${userName}?`)) return;
             } else {
-                const messageArea = document.getElementById('message-area');
-                if (messageArea) messageArea.textContent = 'Could not detect Telegram user. Please enter your name.';
-                userName = prompt(`You selected number ${number}. Please enter your name to continue:`);
+                userName = prompt(`You selected number ${number}. Please enter your name:`);
                 if (!userName || !userName.trim()) return;
                 userId = 'user_browser_' + Math.random().toString(36).substr(2, 9);
             }
-            
             await submitSelection(roundId, number, userId, userName);
         }
-
-        // --- Pasting in unchanged functions for safety ---
         async function submitSelection(roundId, number, userId, userName) {
             const messageArea = document.getElementById('message-area');
             try {
@@ -122,56 +171,6 @@
                 messageArea.textContent = result.message;
                 loadGameGrid(roundId);
             } catch (error) { console.error("Selection Error:", error); messageArea.textContent = `Error: ${error.message}`; }
-        }
-        async function loadLobby() {
-            const roundsList = document.getElementById('rounds-list');
-            try {
-                const response = await fetch(`${API_URL}/api/rounds/open`);
-                if (!response.ok) throw new Error('Network response was not ok');
-                const rounds = await response.json();
-                roundsList.innerHTML = '';
-                if (rounds.length === 0) { roundsList.innerHTML = '<p>No open rounds.</p>'; return; }
-                rounds.forEach(round => {
-                    const card = document.createElement('div'); card.className = 'round-card';
-                    card.innerHTML = `<h2>${round.name}</h2><p>${round.price} Birr Entry</p><p>${round.confirmed_players} / ${round.grid_size} Slots Filled</p>`;
-                    card.onclick = () => { window.location.href = `?round=${round.id}`; };
-                    roundsList.appendChild(card);
-});
-            } catch (error) { console.error("Lobby Error:", error); roundsList.innerHTML = '<p>Could not load rounds.</p>'; }
-        }
-        async function loadRecentWinners() {
-            const recentWinnersList = document.getElementById('recent-winners-list');
-            const winnersWrapper = document.getElementById('winners-wrapper');
-            try {
-                const response = await fetch(`${API_URL}/api/winners/recent?limit=20`);
-                if (!response.ok) throw new Error('Network response was not ok');
-                const winners = await response.json();
-                recentWinnersList.innerHTML = '';
-                if (winners.length === 0) { recentWinnersList.innerHTML = '<li>No winners yet.</li>'; return; }
-                const winnerItems = winners.map(w => `<li>${w.user_name} won ${w.prize_amount.toFixed(2)} Birr in "${w.round_name}"</li>`).join('');
-                recentWinnersList.innerHTML = winnerItems + winnerItems;
-                winnersWrapper.addEventListener('mouseenter', () => recentWinnersList.classList.add('paused'));
-                winnersWrapper.addEventListener('mouseleave', () => recentWinnersList.classList.remove('paused'));
-            } catch (error) { console.error("Winners Error:", error); recentWinnersList.innerHTML = '<li>Could not load winners.</li>'; }
-        }
-        async function loadGameGrid(roundId) {
-            const roundNameHeader = document.getElementById('round-name'), gridContainer = document.getElementById('grid-container'), messageArea = document.getElementById('message-area');
-            try {
-                const response = await fetch(`${API_URL}/api/game_state/${roundId}`);
-                if (!response.ok) throw new Error('Network response was not ok');
-                const state = await response.json();
-                roundNameHeader.textContent = state.round_name;
-                gridContainer.innerHTML = '';
-                const selections = state.selections || {};
-                for (let i = 1; i <= state.grid_size; i++) {
-                    const numberDiv = document.createElement('div'); numberDiv.className = 'grid-number'; numberDiv.textContent = i;
-                    const selection = selections[i];
-                    if (selection) { numberDiv.classList.add(`status-${selection.status}`); numberDiv.title = `Selected by: ${selection.user_name}`; }
-                    else { numberDiv.classList.add('status-available'); numberDiv.onclick = () => handleNumberClick(roundId, i); }
-                    gridContainer.appendChild(numberDiv);
-                }
-                messageArea.textContent = 'Please select an available number.';
-            } catch (error) { console.error("Game Grid Error:", error); messageArea.textContent = 'Could not load grid.'; }
         }
     </script>
 </body>

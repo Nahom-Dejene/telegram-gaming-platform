@@ -150,9 +150,12 @@ def disapprove_selection():
     log_action('ADMIN', 'DISAPPROVE_SELECTION', f'Disapproved selection ID {selection_id}')
     return jsonify({'success': True})
 
+# In app.py, replace the existing run_draw function
+
 @app.route('/api/admin/run_draw/<int:round_id>', methods=['POST'])
 @admin_required
 def run_draw(round_id):
+    # ... (The first part of the function is the same: get round info, get selections, check count) ...
     conn = get_db_connection()
     round_info = conn.execute("SELECT * FROM rounds WHERE id = ?", (round_id,)).fetchone()
     if not round_info or round_info['status'] != 'open':
@@ -162,9 +165,35 @@ def run_draw(round_id):
     if len(confirmed_selections) < 3:
         conn.close()
         return jsonify({'error': f'Need at least 3 confirmed players, have {len(confirmed_selections)}.'}), 400
+    
+    # ... (Prize calculation is the same) ...
     prize_pool = len(confirmed_selections) * round_info['price']
     prizes = {1: prize_pool * 0.40, 2: prize_pool * 0.20, 3: prize_pool * 0.10}
     winners = random.sample(confirmed_selections, 3)
+
+    # --- NEW LOGIC: SEND TELEGRAM MESSAGES ---
+    if bot_app:
+        print("Attempting to send winner notifications via Telegram...")
+        for i, winner in enumerate(winners):
+            prize_tier = i + 1
+            winner_user_id = winner['user_id']
+            message = (
+                f"🎉 Congratulations, {winner['user_name']}! 🎉\n\n"
+                f"You have won in the lottery round: **{round_info['name']}**.\n\n"
+                f"**Your Rank:** {prize_tier}\n"
+                f"**Your Winning Number:** {winner['number']}\n"
+                f"**Your Prize:** {prizes[prize_tier]:.2f} Birr\n\n"
+                "We will be in contact with you shortly regarding your prize."
+            )
+            try:
+                # We need to run this async function within our sync Flask context
+                asyncio.run(bot_app.bot.send_message(chat_id=winner_user_id, text=message, parse_mode='Markdown'))
+                print(f"Successfully sent message to user ID: {winner_user_id}")
+            except Exception as e:
+                print(f"ERROR: Could not send message to user ID {winner_user_id}. Reason: {e}")
+    # --- END OF NEW LOGIC ---
+
+    # ... (The rest of the function is the same: save winners to DB, close round) ...
     for i, winner in enumerate(winners):
         prize_tier = i + 1
         conn.execute('INSERT INTO winners (round_id, winning_number, user_id, user_name, prize_tier, prize_amount) VALUES (?, ?, ?, ?, ?, ?)',
@@ -254,6 +283,30 @@ def get_recent_winners():
     conn.close()
     return jsonify([dict(row) for row in winners])
 
+# Add this to the Player API Endpoints section in app.py
+
+@app.route('/api/winners/history', methods=['GET'])
+def get_winner_history():
+    """Returns the full winner details for the last 3 completed rounds."""
+    conn = get_db_connection()
+    # First, get the IDs of the last 3 completed/archived rounds
+    recent_rounds = conn.execute(
+        "SELECT id, name FROM rounds WHERE status IN ('completed', 'archived') ORDER BY id DESC LIMIT 3"
+    ).fetchall()
+    
+    history = []
+    for round_row in recent_rounds:
+        winners = conn.execute(
+            "SELECT * FROM winners WHERE round_id = ? ORDER BY prize_tier ASC", (round_row['id'],)
+        ).fetchall()
+        history.append({
+            "round_name": round_row['name'],
+            "winners": [dict(w) for w in winners]
+        })
+        
+    conn.close()
+    return jsonify(history)
+
 # ===============================================================
 # TELEGRAM BOT LOGIC
 # ===============================================================
@@ -298,3 +351,4 @@ async def setup_webhook():
             print(f"Webhook info: {webhook_info}")
     else:
         print("Cannot set webhook, TELEGRAM_TOKEN is not set.")
+
