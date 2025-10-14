@@ -50,16 +50,40 @@
     <!-- END OF CORRECTION -->
 
     <script>
-        // The last version of the script with debugging is fine.
-        // I will paste the clean version now for the final product.
-        const lobbyView = document.getElementById('lobby');
-        const gameView = document.getElementById('game-board');
+  
         const API_URL = 'https://telegram-gaming-platform.onrender.com';
-        let currentRoundId = null;
+        
 
+         // --- Telegram Web App Integration ---
+        // We will call this function as soon as the page loads
+        function initializeTelegramWebApp() {
+            try {
+                // Get the Telegram Web App object
+                const tg = window.Telegram.WebApp;
+
+                // Tell Telegram that the app is ready to be shown.
+                // This is a crucial step for a smooth user experience.
+                tg.ready();
+
+                // Make the user data globally accessible after it's ready
+                window.tgUser = tg.initDataUnsafe.user;
+                console.log("Telegram Web App initialized successfully. User:", window.tgUser);
+
+            } catch (error) {
+                console.error("Telegram Web App initialization failed:", error);
+                // If this fails, window.tgUser will be undefined, and we'll fall back to the prompt.
+            }
+        }
+        
+        // --- Core Application Logic ---
         document.addEventListener('DOMContentLoaded', () => {
+            initializeTelegramWebApp(); // Initialize Telegram API first
+
+            const lobbyView = document.getElementById('lobby');
+            const gameView = document.getElementById('game-board');
             const params = new URLSearchParams(window.location.search);
-            currentRoundId = params.get('round');
+            const currentRoundId = params.get('round');
+
             if (currentRoundId) {
                 lobbyView.classList.add('hidden');
                 gameView.classList.remove('hidden');
@@ -70,6 +94,49 @@
             }
         });
 
+        // --- All other functions (loadLobby, loadRecentWinners, etc.) ---
+        
+        async function handleNumberClick(roundId, number) {
+            let userId, userName;
+
+            // Check if the global tgUser object was successfully initialized
+            if (window.tgUser && window.tgUser.id) {
+                userId = window.tgUser.id;
+                userName = window.tgUser.username ? `@${window.tgUser.username}` : `${window.tgUser.first_name} ${window.tgUser.last_name || ''}`.trim();
+                
+                if (!confirm(`Confirm selection of number ${number} as ${userName}?`)) {
+                    return;
+                }
+            } else {
+                // Fallback for browsers or if the API fails
+                document.getElementById('message-area').textContent = 'Could not detect Telegram user. Please enter your name.';
+                userName = prompt(`You selected number ${number}. Please enter your name to continue:`);
+                if (!userName || !userName.trim()) return;
+                userId = 'user_browser_' + Math.random().toString(36).substr(2, 9);
+            }
+            
+            await submitSelection(roundId, number, userId, userName);
+        }
+
+        async function submitSelection(roundId, number, userId, userName) { /* ... Unchanged ... */ }
+        async function loadLobby() { /* ... Unchanged ... */ }
+        async function loadRecentWinners() { /* ... Unchanged ... */ }
+        async function loadGameGrid(roundId) { /* ... Unchanged ... */ }
+
+        // --- Pasting in unchanged functions for safety ---
+        async function submitSelection(roundId, number, userId, userName) {
+            const messageArea = document.getElementById('message-area');
+            try {
+                const response = await fetch(`${API_URL}/api/select_number`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ round_id: roundId, number: number, user_id: userId, user_name: userName })
+                });
+                if (!response.ok) { const err = await response.json(); throw new Error(err.error); }
+                const result = await response.json();
+                messageArea.textContent = result.message;
+                loadGameGrid(roundId);
+            } catch (error) { console.error("Selection Error:", error); messageArea.textContent = `Error: ${error.message}`; }
+        }
         async function loadLobby() {
             const roundsList = document.getElementById('rounds-list');
             try {
@@ -77,7 +144,7 @@
                 if (!response.ok) throw new Error('Network response was not ok');
                 const rounds = await response.json();
                 roundsList.innerHTML = '';
-                if (rounds.length === 0) { roundsList.innerHTML = '<p>No open rounds available.</p>'; return; }
+                if (rounds.length === 0) { roundsList.innerHTML = '<p>No open rounds.</p>'; return; }
                 rounds.forEach(round => {
                     const card = document.createElement('div'); card.className = 'round-card';
                     card.innerHTML = `<h2>${round.name}</h2><p>${round.price} Birr Entry</p><p>${round.confirmed_players} / ${round.grid_size} Slots Filled</p>`;
@@ -86,7 +153,6 @@
                 });
             } catch (error) { console.error("Lobby Error:", error); roundsList.innerHTML = '<p>Could not load rounds.</p>'; }
         }
-
         async function loadRecentWinners() {
             const recentWinnersList = document.getElementById('recent-winners-list');
             const winnersWrapper = document.getElementById('winners-wrapper');
@@ -102,11 +168,8 @@
                 winnersWrapper.addEventListener('mouseleave', () => recentWinnersList.classList.remove('paused'));
             } catch (error) { console.error("Winners Error:", error); recentWinnersList.innerHTML = '<li>Could not load winners.</li>'; }
         }
-
         async function loadGameGrid(roundId) {
-            const roundNameHeader = document.getElementById('round-name');
-            const gridContainer = document.getElementById('grid-container');
-            const messageArea = document.getElementById('message-area');
+            const roundNameHeader = document.getElementById('round-name'), gridContainer = document.getElementById('grid-container'), messageArea = document.getElementById('message-area');
             try {
                 const response = await fetch(`${API_URL}/api/game_state/${roundId}`);
                 if (!response.ok) throw new Error('Network response was not ok');
@@ -117,64 +180,12 @@
                 for (let i = 1; i <= state.grid_size; i++) {
                     const numberDiv = document.createElement('div'); numberDiv.className = 'grid-number'; numberDiv.textContent = i;
                     const selection = selections[i];
-                    if (selection) { numberDiv.classList.add(`status-${selection.status}`); numberDiv.title = `Selected by: ${selection.user_name}`; } 
+                    if (selection) { numberDiv.classList.add(`status-${selection.status}`); numberDiv.title = `Selected by: ${selection.user_name}`; }
                     else { numberDiv.classList.add('status-available'); numberDiv.onclick = () => handleNumberClick(roundId, i); }
                     gridContainer.appendChild(numberDiv);
                 }
                 messageArea.textContent = 'Please select an available number.';
             } catch (error) { console.error("Game Grid Error:", error); messageArea.textContent = 'Could not load grid.'; }
-        }
-
-        async function handleNumberClick(roundId, number) {
-            const messageArea = document.getElementById('message-area');
-            
-            // --- THIS IS THE NEW LOGIC ---
-            if (typeof window.Telegram.WebApp === 'undefined' || !window.Telegram.WebApp.initDataUnsafe.user) {
-                // This is a fallback for when testing in a normal browser
-                // In production inside Telegram, this block should not be reached.
-                alert('This game is designed to be played inside Telegram.');
-                const userName = prompt(`You selected number ${number}. Please enter your name:`);
-                if (!userName || !userName.trim()) return;
-                const userId = 'user_browser_' + Math.random().toString(36).substr(2, 9);
-                submitSelection(roundId, number, userId, userName.trim());
-                return;
-            }
-
-            // Get user data from the Telegram Web App API
-            const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
-            const userId = tgUser.id; // The unique and permanent user ID from Telegram
-
-            // Construct a display name: use username if available, otherwise First + Last name.
-            const userName = tgUser.username ? `@${tgUser.username}` : `${tgUser.first_name} ${tgUser.last_name || ''}`.trim();
-
-            // Ask for confirmation before sending
-            if (!confirm(`Confirm selection of number ${number} as ${userName}?`)) {
-                return;
-            }
-            
-            await submitSelection(roundId, number, userId, userName);
-        }
-
-        // I've moved the submission logic to its own function for cleanliness.
-        async function submitSelection(roundId, number, userId, userName) {
-            const messageArea = document.getElementById('message-area');
-            try {
-                const response = await fetch(`${API_URL}/api/select_number`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ round_id: roundId, number: number, user_id: userId, user_name: userName })
-                });
-
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.error || 'Server responded with an error');
-                }
-                const result = await response.json();
-                messageArea.textContent = result.message;
-                loadGameGrid(roundId);
-            } catch (error) {
-                console.error("Selection Error:", error);
-                messageArea.textContent = `Error: ${error.message}`;
-            }
         }
     </script>
 </body>
