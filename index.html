@@ -3,71 +3,190 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Load the Telegram script first -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <title>Telegram API Diagnostic</title>
+    <title>Lottery Lobby</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #1c1c1e; color: #fff; padding: 20px; text-align: left; }
-        h1 { text-align: center; }
-        #diag-log { border: 2px solid #ffcc00; padding: 15px; margin-top: 20px; border-radius: 8px; font-family: "Courier New", monospace; }
-        .log-entry { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #444; word-break: break-all; }
-        .log-ok { color: #34c759; }
-        .log-error { color: #ff3b30; font-weight: bold; }
-        .log-info { color: #50e3c2; }
-        strong { color: #ffcc00; }
+        body { font-family: sans-serif; background-color: #1c1c1e; color: #fff; padding: 20px; text-align: center; }
+        .hidden { display: none; }
+        #lobby, #game-board { max-width: 600px; margin: 0 auto; }
+        .round-card { background-color: #3a3a3c; border-radius: 12px; padding: 20px; margin-bottom: 15px; cursor: pointer; transition: transform 0.2s; }
+        .round-card:hover { transform: scale(1.03); }
+        .round-card h2 { margin: 0 0 10px 0; }
+        .round-card p { margin: 5px 0 0 0; color: #c7c7cc; }
+        #recent-winners { margin-top: 40px; }
+        .winners-container { height: 180px; overflow: hidden; position: relative; background-color: #2c2c2e; border-radius: 8px; padding: 10px; }
+        #recent-winners-list { list-style: none; padding: 0; margin: 0; position: absolute; width: calc(100% - 20px); animation: scroll-up 20s linear infinite; }
+        #recent-winners-list.paused { animation-play-state: paused; }
+        #recent-winners-list li { padding: 10px; border-bottom: 1px solid #444; }
+        #recent-winners-list li:last-child { border-bottom: none; }
+        @keyframes scroll-up { 0% { transform: translateY(0%); } 100% { transform: translateY(-50%); } }
+        #grid-container { display: grid; grid-template-columns: repeat(10, 1fr); gap: 8px; margin-top: 20px; }
+        .grid-number { aspect-ratio: 1 / 1; display: flex; justify-content: center; align-items: center; font-weight: bold; border-radius: 8px; cursor: pointer; }
+        .status-available { background-color: #34c759; }
+        .status-pending { background-color: #ff9500; cursor: not-allowed; }
+        .status-confirmed { background-color: #5856d6; cursor: not-allowed; }
+        #message-area { margin-top: 20px; font-size: 1.2em; min-height: 2em; }
     </style>
 </head>
 <body>
 
-    <h1>Telegram Web App Diagnostic</h1>
-    <div id="diag-log"></div>
+    <div id="lobby">
+        <h1>Open Lottery Rounds</h1>
+        <div id="rounds-list"><p>Loading rounds...</p></div>
+        <div id="recent-winners">
+            <h2>🏆 Recent Winners</h2>
+            <div class="winners-container" id="winners-wrapper">
+                <ul id="recent-winners-list"><li>Loading winners...</li></ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- THIS IS THE CORRECTED HTML SECTION -->
+    <div id="game-board" class="hidden">
+        <h1 id="round-name"></h1>
+        <div id="grid-container"></div>
+        <div id="message-area">Loading game grid...</div>
+    </div>
+    <!-- END OF CORRECTION -->
 
     <script>
-        const logContainer = document.getElementById('diag-log');
+  
+        const API_URL = 'https://telegram-gaming-platform.onrender.com';
+        
 
-        function log(message, type = 'info') {
-            const entry = document.createElement('div');
-            entry.className = `log-entry log-${type}`;
-            entry.innerHTML = message; // Use innerHTML to allow for bold tags
-            logContainer.appendChild(entry);
-        }
-
-        // --- Run diagnostics as soon as the script executes ---
-        function runDiagnostics() {
-            log('<strong>Step 1:</strong> Checking for <code>window.Telegram.WebApp</code> object...');
-
-            if (typeof window.Telegram !== 'undefined' && typeof window.Telegram.WebApp !== 'undefined') {
-                log('✅ <strong>SUCCESS:</strong> <code>window.Telegram.WebApp</code> object was found.', 'ok');
-                
+         // --- Telegram Web App Integration ---
+        // We will call this function as soon as the page loads
+        function initializeTelegramWebApp() {
+            try {
+                // Get the Telegram Web App object
                 const tg = window.Telegram.WebApp;
-                
-                // Always call ready()
-                log('<strong>Step 2:</strong> Calling <code>tg.ready()</code> to signal the app has loaded...');
+
+                // Tell Telegram that the app is ready to be shown.
+                // This is a crucial step for a smooth user experience.
                 tg.ready();
-                log('<code>tg.ready()</code> executed.', 'info');
 
-                log('<strong>Step 3:</strong> Checking for user data in <code>tg.initDataUnsafe</code>...');
-                if (tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) {
-                    log('✅ <strong>SUCCESS:</strong> User data was found.', 'ok');
-                    
-                    const user = tg.initDataUnsafe.user;
-                    log(`- <strong>User ID:</strong> ${user.id}`, 'ok');
-                    log(`- <strong>First Name:</strong> ${user.first_name}`, 'ok');
-                    log(`- <strong>Username:</strong> ${user.username || 'Not set'}`, 'ok');
+                // Make the user data globally accessible after it's ready
+                window.tgUser = tg.initDataUnsafe.user;
+                console.log("Telegram Web App initialized successfully. User:", window.tgUser);
 
-                } else {
-                    log('❌ <strong>FAILURE:</strong> User data (<code>initDataUnsafe.user</code>) was NOT found.', 'error');
-                    log('This usually means the app was opened in a regular browser or from a context that does not pass user info.', 'error');
-                }
-
-            } else {
-                log('❌ <strong>CRITICAL FAILURE:</strong> <code>window.Telegram.WebApp</code> object was NOT FOUND.', 'error');
-                log('This means the <code>telegram-web-app.js</code> script from telegram.org either failed to load, was blocked, or has not executed yet.', 'error');
+            } catch (error) {
+                console.error("Telegram Web App initialization failed:", error);
+                // If this fails, window.tgUser will be undefined, and we'll fall back to the prompt.
             }
         }
+        
+        // --- Core Application Logic ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeTelegramWebApp(); // Initialize Telegram API first
 
-        // Run the diagnostics
-        runDiagnostics();
+            const lobbyView = document.getElementById('lobby');
+            const gameView = document.getElementById('game-board');
+            const params = new URLSearchParams(window.location.search);
+            const currentRoundId = params.get('round');
+
+            if (currentRoundId) {
+                lobbyView.classList.add('hidden');
+                gameView.classList.remove('hidden');
+                loadGameGrid(currentRoundId);
+            } else {
+                loadLobby();
+                loadRecentWinners();
+            }
+        });
+
+        // --- All other functions (loadLobby, loadRecentWinners, etc.) ---
+        
+        async function handleNumberClick(roundId, number) {
+            let userId, userName;
+
+            // Check if the global tgUser object was successfully initialized
+            if (window.tgUser && window.tgUser.id) {
+                userId = window.tgUser.id;
+                userName = window.tgUser.username ? `@${window.tgUser.username}` : `${window.tgUser.first_name} ${window.tgUser.last_name || ''}`.trim();
+                
+                if (!confirm(`Confirm selection of number ${number} as ${userName}?`)) {
+                    return;
+                }
+            } else {
+                // Fallback for browsers or if the API fails
+                document.getElementById('message-area').textContent = 'Could not detect Telegram user. Please enter your name.';
+                userName = prompt(`You selected number ${number}. Please enter your name to continue:`);
+                if (!userName || !userName.trim()) return;
+                userId = 'user_browser_' + Math.random().toString(36).substr(2, 9);
+            }
+            
+            await submitSelection(roundId, number, userId, userName);
+        }
+
+        async function submitSelection(roundId, number, userId, userName) { /* ... Unchanged ... */ }
+        async function loadLobby() { /* ... Unchanged ... */ }
+        async function loadRecentWinners() { /* ... Unchanged ... */ }
+        async function loadGameGrid(roundId) { /* ... Unchanged ... */ }
+
+        // --- Pasting in unchanged functions for safety ---
+        async function submitSelection(roundId, number, userId, userName) {
+            const messageArea = document.getElementById('message-area');
+            try {
+                const response = await fetch(`${API_URL}/api/select_number`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ round_id: roundId, number: number, user_id: userId, user_name: userName })
+                });
+                if (!response.ok) { const err = await response.json(); throw new Error(err.error); }
+                const result = await response.json();
+                messageArea.textContent = result.message;
+                loadGameGrid(roundId);
+            } catch (error) { console.error("Selection Error:", error); messageArea.textContent = `Error: ${error.message}`; }
+        }
+        async function loadLobby() {
+            const roundsList = document.getElementById('rounds-list');
+            try {
+                const response = await fetch(`${API_URL}/api/rounds/open`);
+                if (!response.ok) throw new Error('Network response was not ok');
+                const rounds = await response.json();
+                roundsList.innerHTML = '';
+                if (rounds.length === 0) { roundsList.innerHTML = '<p>No open rounds.</p>'; return; }
+                rounds.forEach(round => {
+                    const card = document.createElement('div'); card.className = 'round-card';
+                    card.innerHTML = `<h2>${round.name}</h2><p>${round.price} Birr Entry</p><p>${round.confirmed_players} / ${round.grid_size} Slots Filled</p>`;
+                    card.onclick = () => { window.location.href = `?round=${round.id}`; };
+                    roundsList.appendChild(card);
+                });
+            } catch (error) { console.error("Lobby Error:", error); roundsList.innerHTML = '<p>Could not load rounds.</p>'; }
+        }
+        async function loadRecentWinners() {
+            const recentWinnersList = document.getElementById('recent-winners-list');
+            const winnersWrapper = document.getElementById('winners-wrapper');
+            try {
+                const response = await fetch(`${API_URL}/api/winners/recent?limit=20`);
+                if (!response.ok) throw new Error('Network response was not ok');
+                const winners = await response.json();
+                recentWinnersList.innerHTML = '';
+                if (winners.length === 0) { recentWinnersList.innerHTML = '<li>No winners yet.</li>'; return; }
+                const winnerItems = winners.map(w => `<li>${w.user_name} won ${w.prize_amount.toFixed(2)} Birr in "${w.round_name}"</li>`).join('');
+                recentWinnersList.innerHTML = winnerItems + winnerItems;
+                winnersWrapper.addEventListener('mouseenter', () => recentWinnersList.classList.add('paused'));
+                winnersWrapper.addEventListener('mouseleave', () => recentWinnersList.classList.remove('paused'));
+            } catch (error) { console.error("Winners Error:", error); recentWinnersList.innerHTML = '<li>Could not load winners.</li>'; }
+        }
+        async function loadGameGrid(roundId) {
+            const roundNameHeader = document.getElementById('round-name'), gridContainer = document.getElementById('grid-container'), messageArea = document.getElementById('message-area');
+            try {
+                const response = await fetch(`${API_URL}/api/game_state/${roundId}`);
+                if (!response.ok) throw new Error('Network response was not ok');
+                const state = await response.json();
+                roundNameHeader.textContent = state.round_name;
+                gridContainer.innerHTML = '';
+                const selections = state.selections || {};
+                for (let i = 1; i <= state.grid_size; i++) {
+                    const numberDiv = document.createElement('div'); numberDiv.className = 'grid-number'; numberDiv.textContent = i;
+                    const selection = selections[i];
+                    if (selection) { numberDiv.classList.add(`status-${selection.status}`); numberDiv.title = `Selected by: ${selection.user_name}`; }
+                    else { numberDiv.classList.add('status-available'); numberDiv.onclick = () => handleNumberClick(roundId, i); }
+                    gridContainer.appendChild(numberDiv);
+                }
+                messageArea.textContent = 'Please select an available number.';
+            } catch (error) { console.error("Game Grid Error:", error); messageArea.textContent = 'Could not load grid.'; }
+        }
     </script>
 </body>
 </html>
