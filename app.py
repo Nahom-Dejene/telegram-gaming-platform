@@ -405,18 +405,18 @@ def run_bot():
     application = ApplicationBuilder().token(token).build()
     application.add_handler(CommandHandler("start", start))
     application.run_polling()
+    print("--- Bot polling has stopped. ---") # This line should not be reached in normal operation
+# ===============================================================
+# Main Execution: Start Bot Thread and Flask App
+# ===============================================================
 
+# This top-level code will run when Gunicorn imports the file on Render
+print("--- Starting bot thread from top level ---")
+bot_thread = threading.Thread(target=run_bot)
+bot_thread.daemon = True
+bot_thread.start()
 
-# REPLACE your old if __name__ == '__main__': block with this:
 if __name__ == '__main__':
-   # ... (all your API endpoints and bot functions are above this) ...
-
-# --- Main Execution ---
-# This part of the code runs when Gunicorn imports the file.
-    print("Starting bot thread...")
-    bot_thread = threading.Thread(target=run_bot)
-    bot_thread.daemon = True  # Allows the main app to exit even if the thread is running
-    bot_thread.start()
-    print("Bot thread started.")
-
-# Gunicorn will look for the 'app' object, so we don't need an if __name__ == '__main__' block for deployment.
+    print("--- Running in local development mode ---")
+    # use_reloader=False is CRITICAL to prevent the bot thread from starting twice
+    app.run(debug=True, use_reloader=False, host='0.0.0.0', port=5000)
