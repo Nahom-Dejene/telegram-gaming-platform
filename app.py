@@ -416,6 +416,30 @@ bot_thread = threading.Thread(target=run_bot)
 bot_thread.daemon = True
 bot_thread.start()
 
+# ADD THIS NEW FUNCTION TO app.py
+@app.route('/debug/env')
+def debug_env():
+    """A temporary endpoint to check environment variables on the server."""
+    token = os.getenv("TELEGRAM_TOKEN")
+    
+    if token:
+        token_status = {
+            "token_is_set": True,
+            "token_length": len(token),
+            "first_4_chars": token[:4],
+            "last_4_chars": token[-4:]
+        }
+    else:
+        token_status = {
+            "token_is_set": False,
+            "message": "TELEGRAM_TOKEN environment variable was not found."
+        }
+        
+    return jsonify({
+        "environment_check": "OK",
+        "telegram_token_status": token_status
+    })
+
 if __name__ == '__main__':
     print("--- Running in local development mode ---")
     # use_reloader=False is CRITICAL to prevent the bot thread from starting twice
