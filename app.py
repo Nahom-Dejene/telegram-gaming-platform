@@ -394,18 +394,51 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_message = f"Greetings, {update.effective_user.first_name}!\n\nWelcome to the Lottery Platform. Press the button below to join a round."
     await update.message.reply_text(welcome_message, reply_markup=reply_markup)
 
-def run_bot():
-    """Starts the Telegram bot in a polling loop."""
-    print("Starting bot polling...")
-    token = os.getenv("TELEGRAM_TOKEN")
-    if not token:
-        print("CRITICAL: TELEGRAM_TOKEN environment variable not set. Bot will not start.")
-        return
+# In app.py, replace the old run_bot function with this one.
 
-    application = ApplicationBuilder().token(token).build()
-    application.add_handler(CommandHandler("start", start))
-    application.run_polling()
-    print("--- Bot polling has stopped. ---") # This line should not be reached in normal operation
+def run_bot():
+    """Starts the Telegram bot with detailed error logging."""
+    print("--- [BOT THREAD] Starting Telegram Bot Polling ---")
+    
+    try:
+        token = os.getenv("TELEGRAM_TOKEN")
+        if not token:
+            print("--- [BOT THREAD] CRITICAL: TELEGRAM_TOKEN not set. Halting bot thread. ---")
+            return
+
+        print(f"--- [BOT THREAD] Token found with length: {len(token)}. Initializing ApplicationBuilder. ---")
+        
+        # Build the application
+        application = ApplicationBuilder().token(token).build()
+        print("--- [BOT THREAD] Application built successfully. ---")
+
+        # Add the command handler
+        application.add_handler(CommandHandler("start", start))
+        print("--- [BOT THREAD] /start handler added. ---")
+        
+        # Get the updater to start polling manually
+        updater = application.updater
+        if not updater:
+             print("--- [BOT THREAD] CRITICAL: Updater object not found. Cannot start polling. ---")
+             return
+             
+        print("--- [BOT THREAD] Starting updater polling loop... ---")
+        updater.start_polling()
+        print("--- [BOT THREAD] Bot is now officially running and polling for updates. ---")
+        
+        # We need to keep this thread alive.
+        updater.idle()
+        print("--- [BOT THREAD] Bot has stopped polling (idle). ---")
+
+    except Exception as e:
+        # Catch ANY and ALL exceptions during startup and log them.
+        print("--- [BOT THREAD] !!! AN UNEXPECTED ERROR OCCURRED DURING BOT STARTUP !!! ---")
+        print(f"--- [BOT THREAD] ERROR TYPE: {type(e).__name__} ---")
+        print(f"--- [BOT THREAD] ERROR DETAILS: {e} ---")
+        # For more detailed debugging, you could also import traceback and print the stack trace
+        import traceback
+        traceback.print_exc()
+        print("--- [BOT THREAD] Halting bot thread due to error. ---")
 # ===============================================================
 # Main Execution: Start Bot Thread and Flask App
 # ===============================================================
