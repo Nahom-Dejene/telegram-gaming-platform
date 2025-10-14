@@ -1,17 +1,26 @@
-import sqlite3
-import random
+import os
+import re
+from functools import wraps
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import re
-import os
-from functools import wraps
-import threading
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+import sqlite3
+import random
 import asyncio
+
+# Telegram Bot Imports
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes, ExtBot
 
 app = Flask(__name__)
 CORS(app)
+
+# --- Bot Configuration ---
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "YOUR_FALLBACK_TOKEN") # Fallback for safety
+GAME_LOBBY_URL = "https://nahom-dejene.github.io/telegram-gaming-platform/"
+
+# Create the bot application object but DO NOT run it yet.
+bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
+
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -383,11 +392,8 @@ def get_recent_winners():
 # # ... (after your last API endpoint) ...
 
 # ===============================================================
-# TELEGRAM BOT LOGIC (Corrected for v20+)
+# TELEGRAM BOT LOGIC
 # ===============================================================
-GAME_LOBBY_URL = "https://nahom-dejene.github.io/telegram-gaming-platform/"
-
-# The 'start' command handler is async, which is already correct.
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Greets the user and sends the 'Play Game' button."""
     keyboard = [[InlineKeyboardButton("🎮 Open Game Lobby", url=GAME_LOBBY_URL)]]
@@ -395,46 +401,31 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_message = f"Greetings, {update.effective_user.first_name}!\n\nWelcome to the Lottery Platform. Press the button below to join a round."
     await update.message.reply_text(welcome_message, reply_markup=reply_markup)
 
-# THIS IS THE NEW, CORRECT WAY TO RUN THE BOT
-async def main_bot_logic():
-    """The main asynchronous logic for the bot."""
-    print("--- [BOT ASYNC] Starting bot setup... ---")
-    token = os.getenv("TELEGRAM_TOKEN")
-    if not token:
-        print("--- [BOT ASYNC] CRITICAL: TELEGRAM_TOKEN not set. Halting bot. ---")
-        return
+# Add the handler to our bot_app object
+bot_app.add_handler(CommandHandler("start", start))
 
-    application = ApplicationBuilder().token(token).build()
-    application.add_handler(CommandHandler("start", start))
-    
-    print("--- [BOT ASYNC] Bot configured. Starting polling... ---")
-    # run_polling() is a shorthand that handles everything in the background.
-    # It correctly starts and stops the async event loop.
-    await application.run_polling()
-    print("--- [BOT ASYNC] run_polling has finished. ---")
-
-
-def run_bot_in_thread():
-    """Wrapper to run the async bot logic in a new event loop in its own thread."""
-    print("--- [BOT THREAD] Creating new event loop for bot. ---")
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(main_bot_logic())
-    print("--- [BOT THREAD] Event loop finished. ---")
-
+# --- THE NEW WEBHOOK ENDPOINT ---
+@app.route('/telegram-webhook', methods=['POST'])
+async def webhook():
+    """Handles updates from Telegram."""
+    update_data = request.get_json()
+    # Process the update with the bot application
+    async with bot_app:
+        await bot_app.process_update(Update.de_json(data=update_data, bot=bot_app.bot))
+    return 'OK', 200
 
 # ===============================================================
-# Main Execution
+# One-Time Webhook Setup (Run this locally)
 # ===============================================================
-
-# This top-level code runs when Gunicorn imports the file.
-print("--- Starting bot thread from top level ---")
-# We now target the new wrapper function
-bot_thread = threading.Thread(target=run_bot_in_thread)
-bot_thread.daemon = True
-bot_thread.start()
-print("--- Bot thread started. Main thread continues. ---")
-
+async def setup_webhook():
+    """One-time function to tell Telegram where to send updates."""
+    webhook_url = "https://telegram-gaming-platform.onrender.com/telegram-webhook"
+    async with bot_app:
+        await bot_app.bot.set_webhook(url=webhook_url)
+        print(f"Webhook set to: {webhook_url}")
+        # Optionally, check if it was set correctly
+        webhook_info = await bot_app.bot.get_webhook_info()
+        print(f"Webhook info: {webhook_info}")
 
 if __name__ == '__main__':
     print("--- Running in local development mode ---")
