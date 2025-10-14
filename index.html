@@ -49,36 +49,29 @@
     </div>
     <!-- END OF CORRECTION -->
 
-    <script>
-  
+<script>
         const API_URL = 'https://telegram-gaming-platform.onrender.com';
-        
 
-         // --- Telegram Web App Integration ---
-        // We will call this function as soon as the page loads
-        function initializeTelegramWebApp() {
+        // --- Main Entry Point: Use window.onload for maximum safety ---
+        window.onload = function() {
+            // This function will only run after ALL scripts, including telegram-web-app.js, are loaded.
+            
+            // 1. Initialize Telegram Web App
             try {
-                // Get the Telegram Web App object
                 const tg = window.Telegram.WebApp;
-
-                // Tell Telegram that the app is ready to be shown.
-                // This is a crucial step for a smooth user experience.
-                tg.ready();
-
-                // Make the user data globally accessible after it's ready
+                tg.ready(); // Signal that the app is ready
                 window.tgUser = tg.initDataUnsafe.user;
-                console.log("Telegram Web App initialized successfully. User:", window.tgUser);
-
+                console.log("SUCCESS: Telegram Web App initialized. User:", window.tgUser);
             } catch (error) {
-                console.error("Telegram Web App initialization failed:", error);
-                // If this fails, window.tgUser will be undefined, and we'll fall back to the prompt.
+                console.error("INFO: Could not initialize Telegram Web App. Running in fallback mode.", error);
+                // window.tgUser will remain undefined
             }
-        }
-        
-        // --- Core Application Logic ---
-        document.addEventListener('DOMContentLoaded', () => {
-            initializeTelegramWebApp(); // Initialize Telegram API first
 
+            // 2. Start the Application Logic
+            startApp();
+        };
+
+        function startApp() {
             const lobbyView = document.getElementById('lobby');
             const gameView = document.getElementById('game-board');
             const params = new URLSearchParams(window.location.search);
@@ -92,24 +85,22 @@
                 loadLobby();
                 loadRecentWinners();
             }
-        });
+        }
 
-        // --- All other functions (loadLobby, loadRecentWinners, etc.) ---
+        // --- All other functions (loadLobby, etc.) ---
         
         async function handleNumberClick(roundId, number) {
             let userId, userName;
 
-            // Check if the global tgUser object was successfully initialized
             if (window.tgUser && window.tgUser.id) {
                 userId = window.tgUser.id;
                 userName = window.tgUser.username ? `@${window.tgUser.username}` : `${window.tgUser.first_name} ${window.tgUser.last_name || ''}`.trim();
-                
                 if (!confirm(`Confirm selection of number ${number} as ${userName}?`)) {
                     return;
                 }
             } else {
-                // Fallback for browsers or if the API fails
-                document.getElementById('message-area').textContent = 'Could not detect Telegram user. Please enter your name.';
+                const messageArea = document.getElementById('message-area');
+                if (messageArea) messageArea.textContent = 'Could not detect Telegram user. Please enter your name.';
                 userName = prompt(`You selected number ${number}. Please enter your name to continue:`);
                 if (!userName || !userName.trim()) return;
                 userId = 'user_browser_' + Math.random().toString(36).substr(2, 9);
@@ -117,11 +108,6 @@
             
             await submitSelection(roundId, number, userId, userName);
         }
-
-        async function submitSelection(roundId, number, userId, userName) { /* ... Unchanged ... */ }
-        async function loadLobby() { /* ... Unchanged ... */ }
-        async function loadRecentWinners() { /* ... Unchanged ... */ }
-        async function loadGameGrid(roundId) { /* ... Unchanged ... */ }
 
         // --- Pasting in unchanged functions for safety ---
         async function submitSelection(roundId, number, userId, userName) {
@@ -150,7 +136,7 @@
                     card.innerHTML = `<h2>${round.name}</h2><p>${round.price} Birr Entry</p><p>${round.confirmed_players} / ${round.grid_size} Slots Filled</p>`;
                     card.onclick = () => { window.location.href = `?round=${round.id}`; };
                     roundsList.appendChild(card);
-                });
+});
             } catch (error) { console.error("Lobby Error:", error); roundsList.innerHTML = '<p>Could not load rounds.</p>'; }
         }
         async function loadRecentWinners() {
