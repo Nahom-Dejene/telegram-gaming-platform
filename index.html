@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <title>Lottery Lobby</title>
     <style>
         body { font-family: sans-serif; background-color: #1c1c1e; color: #fff; padding: 20px; text-align: center; }
@@ -126,19 +127,54 @@
 
         async function handleNumberClick(roundId, number) {
             const messageArea = document.getElementById('message-area');
-            const userName = prompt(`You selected number ${number}. Please enter your name:`);
-            if (!userName || !userName.trim()) return;
-            const userId = 'user_' + Math.random().toString(36).substr(2, 9);
+            
+            // --- THIS IS THE NEW LOGIC ---
+            if (typeof window.Telegram.WebApp === 'undefined' || !window.Telegram.WebApp.initDataUnsafe.user) {
+                // This is a fallback for when testing in a normal browser
+                // In production inside Telegram, this block should not be reached.
+                alert('This game is designed to be played inside Telegram.');
+                const userName = prompt(`You selected number ${number}. Please enter your name:`);
+                if (!userName || !userName.trim()) return;
+                const userId = 'user_browser_' + Math.random().toString(36).substr(2, 9);
+                submitSelection(roundId, number, userId, userName.trim());
+                return;
+            }
+
+            // Get user data from the Telegram Web App API
+            const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
+            const userId = tgUser.id; // The unique and permanent user ID from Telegram
+
+            // Construct a display name: use username if available, otherwise First + Last name.
+            const userName = tgUser.username ? `@${tgUser.username}` : `${tgUser.first_name} ${tgUser.last_name || ''}`.trim();
+
+            // Ask for confirmation before sending
+            if (!confirm(`Confirm selection of number ${number} as ${userName}?`)) {
+                return;
+            }
+            
+            await submitSelection(roundId, number, userId, userName);
+        }
+
+        // I've moved the submission logic to its own function for cleanliness.
+        async function submitSelection(roundId, number, userId, userName) {
+            const messageArea = document.getElementById('message-area');
             try {
                 const response = await fetch(`${API_URL}/api/select_number`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ round_id: roundId, number: number, user_id: userId, user_name: userName.trim() })
+                    body: JSON.stringify({ round_id: roundId, number: number, user_id: userId, user_name: userName })
                 });
-                if (!response.ok) { const err = await response.json(); throw new Error(err.error); }
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error || 'Server responded with an error');
+                }
                 const result = await response.json();
                 messageArea.textContent = result.message;
                 loadGameGrid(roundId);
-            } catch (error) { console.error("Selection Error:", error); messageArea.textContent = `Error: ${error.message}`; }
+            } catch (error) {
+                console.error("Selection Error:", error);
+                messageArea.textContent = `Error: ${error.message}`;
+            }
         }
     </script>
 </body>
